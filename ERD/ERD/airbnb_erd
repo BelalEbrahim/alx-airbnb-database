@@ -1,0 +1,39 @@
+// Airbnb ER Diagram
+digraph {
+	Users [label="Users
+id
+username
+email
+password
+role"]
+	Properties [label="Properties
+id
+owner_id
+title
+description
+location
+price"]
+	Bookings [label="Bookings
+id
+property_id
+user_id
+check_in_date
+check_out_date"]
+	Reviews [label="Reviews
+id
+property_id
+user_id
+rating
+comment"]
+	Payments [label="Payments
+id
+booking_id
+amount
+payment_date"]
+	Users -> Properties [label=owns]
+	Users -> Bookings [label=makes]
+	Properties -> Bookings [label=has]
+	Properties -> Reviews [label=has]
+	Users -> Reviews [label=leaves]
+	Bookings -> Payments [label=has]
+}
