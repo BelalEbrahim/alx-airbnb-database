@@ -1,3 +1,6 @@
+# alx-airbnb-database
+
+
 # Database Normalization
 
 The database design for the Airbnb clone project is in the **third normal form (3NF)**. Below is the analysis:
