@@ -1,0 +1,241 @@
+## Repository: `alx-airbnb-database`
+
+```
+alx-airbnb-database/
+├── database-adv-script/
+│   ├── ER_Diagram.md
+│   ├── joins_queries.sql
+│   ├── subqueries.sql
+│   ├── aggregations_and_window_functions.sql
+│   ├── database_index.sql
+│   ├── index_performance.md
+│   ├── performance.sql
+│   ├── optimization_report.md
+│   ├── partitioning.sql
+│   ├── partition_performance.md
+│   ├── performance_monitoring.md
+│   └── README.md
+└── README.md
+```
+
+---
+
+### 1. Top‑Level `README.md`
+
+```markdown
+# ALX Airbnb Database Module – Advanced SQL & Optimization
+
+This repository covers advanced SQL querying and performance tuning for a simulated Airbnb dataset. It includes tasks on joins, subqueries, aggregation, indexing, partitioning, and monitoring.
+
+**Structure**:
+- `database-adv-script/`: SQL scripts, reports, and ER diagram.
+
+Follow each task directory and its instructions in [database-adv-script/README.md](database-adv-script/README.md).
+```
+
+---
+
+### 2. `database-adv-script/README.md`
+
+```markdown
+# Database Advanced Script Tasks
+
+This directory contains the SQL scripts and reports for each task:
+
+| Task | File                                | Description                                    |
+|------|-------------------------------------|------------------------------------------------|
+| ERD  | `ER_Diagram.md`                     | Entity-Relationship model of the schema        |
+| 0    | `joins_queries.sql`                 | INNER, LEFT, FULL OUTER JOIN examples         |
+| 1    | `subqueries.sql`                    | Correlated & non‑correlated subqueries         |
+| 2    | `aggregations_and_window_functions.sql` | GROUP BY + window functions                |
+| 3    | `database_index.sql`                | CREATE INDEX statements                       |
+| 3    | `index_performance.md`              | Before/after EXPLAIN outputs                   |
+| 4    | `performance.sql`                   | Initial & refactored query                     |
+| 4    | `optimization_report.md`            | EXPLAIN analysis & refactoring summary         |
+| 5    | `partitioning.sql`                  | Booking table partitioning                     |
+| 5    | `partition_performance.md`          | Performance benchmarks                         |
+| 6    | `performance_monitoring.md`         | SHOW PROFILE/EXPLAIN ANALYZE & adjustments     |
+```
+
+---
+
+### 3. `database-adv-script/ER_Diagram.md`
+
+````markdown
+# ER Diagram – Airbnb Schema
+
+**Entities and Relationships**:
+- **users** (user_id PK, name, email, ...)
+- **properties** (property_id PK, owner_id FK→users, location, ...)
+- **bookings** (booking_id PK, user_id FK→users, property_id FK→properties, start_date, end_date, ...)
+- **reviews** (review_id PK, property_id FK→properties, user_id FK→users, rating, comment)
+- **payments** (payment_id PK, booking_id FK→bookings, amount, payment_date)
+
+```erd
+title Airbnb
+users ||--o{ bookings: makes
+users ||--o{ reviews: writes
+properties ||--o{ bookings: receives
+properties ||--o{ reviews: has
+bookings ||--o{ payments: pays
+properties }o--|| users: owned_by
+````
+
+````
+
+---
+
+### 4. `database-adv-script/joins_queries.sql`
+```sql
+-- Task 0: Joins
+-- 1. INNER JOIN: All bookings with their users
+SELECT b.booking_id,
+       u.user_id,
+       u.name,
+       b.start_date,
+       b.end_date
+FROM bookings b
+INNER JOIN users u ON b.user_id = u.user_id;
+
+-- 2. LEFT JOIN: All properties with their reviews (including none)
+SELECT p.property_id,
+       p.location,
+       r.review_id,
+       r.rating
+FROM properties p
+LEFT JOIN reviews r ON p.property_id = r.property_id;
+
+-- 3. FULL OUTER JOIN: All users and all bookings
+-- (Note: MySQL does not support FULL OUTER JOIN; use UNION workaround)
+SELECT u.user_id, u.name, b.booking_id
+FROM users u
+LEFT JOIN bookings b ON u.user_id = b.user_id
+UNION
+SELECT u.user_id, u.name, b.booking_id
+FROM users u
+RIGHT JOIN bookings b ON u.user_id = b.user_id;
+````
+
+---
+
+### 5. `database-adv-script/subqueries.sql`
+
+```sql
+-- Task 1: Subqueries
+-- 1. Non‑correlated: Properties with avg rating > 4.0
+SELECT property_id,
+       location
+FROM properties
+WHERE property_id IN (
+    SELECT property_id
+    FROM reviews
+    GROUP BY property_id
+    HAVING AVG(rating) > 4.0
+);
+
+-- 2. Correlated: Users with more than 3 bookings
+SELECT user_id,
+       name
+FROM users u
+WHERE (
+    SELECT COUNT(*)
+    FROM bookings b
+    WHERE b.user_id = u.user_id
+) > 3;
+```
+
+---
+
+### 6. `database-adv-script/aggregations_and_window_functions.sql`
+
+```sql
+-- Task 2: Aggregations & Window Functions
+-- 1. Total bookings per user
+SELECT u.user_id,
+       u.name,
+       COUNT(b.booking_id) AS total_bookings
+FROM users u
+LEFT JOIN bookings b ON u.user_id = b.user_id
+GROUP BY u.user_id, u.name;
+
+-- 2. Rank properties by bookings
+SELECT
+  property_id,
+  location,
+  bookings_count,
+  RANK() OVER (ORDER BY bookings_count DESC) AS rank
+FROM (
+  SELECT p.property_id,
+         p.location,
+         COUNT(b.booking_id) AS bookings_count
+  FROM properties p
+  LEFT JOIN bookings b ON p.property_id = b.property_id
+  GROUP BY p.property_id, p.location
+) sub;
+```
+
+---
+
+### 7. `database-adv-script/database_index.sql`
+
+```sql
+-- Task 3: Create Indexes
+CREATE INDEX idx_bookings_user_id ON bookings(user_id);
+CREATE INDEX idx_bookings_property_id ON bookings(property_id);
+CREATE INDEX idx_reviews_property_id ON reviews(property_id);
+CREATE INDEX idx_payments_booking_id ON payments(booking_id);
+```
+
+---
+
+### 8. `database-adv-script/performance.sql`
+
+```sql
+-- Task 4: Initial Complex Query
+SELECT b.booking_id,
+       u.user_id,
+       u.name,
+       p.property_id,
+       p.location,
+       pay.payment_id,
+       pay.amount
+FROM bookings b
+JOIN users u ON b.user_id = u.user_id
+JOIN properties p ON b.property_id = p.property_id
+JOIN payments pay ON pay.booking_id = b.booking_id;
+
+-- (Refactor after EXPLAIN analysis...)
+```
+
+---
+
+### 9. `database-adv-script/partitioning.sql`
+
+```sql
+-- Task 5: Partition bookings by start_date (PostgreSQL example)
+-- 1. Create partitioned table
+CREATE TABLE bookings_partitioned (
+  booking_id   SERIAL PRIMARY KEY,
+  user_id      INT NOT NULL,
+  property_id  INT NOT NULL,
+  start_date   DATE NOT NULL,
+  end_date     DATE NOT NULL
+) PARTITION BY RANGE (start_date);
+
+-- 2. Create partitions (e.g., by year)
+CREATE TABLE bookings_2024 PARTITION OF bookings_partitioned
+  FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+CREATE TABLE bookings_2025 PARTITION OF bookings_partitioned
+  FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
+
+-- 3. Insert data from original bookings
+INSERT INTO bookings_partitioned (booking_id, user_id, property_id, start_date, end_date)
+SELECT booking_id, user_id, property_id, start_date, end_date
+FROM bookings;
+```
+
+---
+
+*The markdown reports (`*.md`) will include `EXPLAIN` outputs, timing comparisons, and narrative summaries under each task’s section.*
+
+Feel free to review this scaffold—once approved, I’ll implement the EXPLAIN analyses, refactor queries, and fill in the performance reports step by step.

@@ -90,7 +90,7 @@ def generate_png_file():
     dot.edge('Bookings', 'Payments', label='has')
 
     # Render the diagram as a PNG file
-    dot.render('ERD/airbnb_erd', format='png')
+    dot.render('airbnb_erd', format='png')
 
 # Execute both functions to generate the files
 generate_drawio_file()
