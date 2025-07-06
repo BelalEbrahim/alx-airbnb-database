@@ -13,8 +13,7 @@ alx-airbnb-database/
 │   ├── optimization_report.md
 │   ├── partitioning.sql
 │   ├── partition_performance.md
-│   ├── performance_monitoring.md
-│   └── README.md
+│   └── performance_monitoring.md
 └── README.md
 ```
 
@@ -30,7 +29,7 @@ This repository covers advanced SQL querying and performance tuning for a simula
 **Structure**:
 - `database-adv-script/`: SQL scripts, reports, and ER diagram.
 
-Follow each task directory and its instructions in [database-adv-script/README.md](database-adv-script/README.md).
+Follow each task in [database-adv-script/README.md].
 ```
 
 ---
@@ -42,19 +41,19 @@ Follow each task directory and its instructions in [database-adv-script/README.m
 
 This directory contains the SQL scripts and reports for each task:
 
-| Task | File                                | Description                                    |
-|------|-------------------------------------|------------------------------------------------|
-| ERD  | `ER_Diagram.md`                     | Entity-Relationship model of the schema        |
-| 0    | `joins_queries.sql`                 | INNER, LEFT, FULL OUTER JOIN examples         |
-| 1    | `subqueries.sql`                    | Correlated & non‑correlated subqueries         |
-| 2    | `aggregations_and_window_functions.sql` | GROUP BY + window functions                |
-| 3    | `database_index.sql`                | CREATE INDEX statements                       |
-| 3    | `index_performance.md`              | Before/after EXPLAIN outputs                   |
-| 4    | `performance.sql`                   | Initial & refactored query                     |
-| 4    | `optimization_report.md`            | EXPLAIN analysis & refactoring summary         |
-| 5    | `partitioning.sql`                  | Booking table partitioning                     |
-| 5    | `partition_performance.md`          | Performance benchmarks                         |
-| 6    | `performance_monitoring.md`         | SHOW PROFILE/EXPLAIN ANALYZE & adjustments     |
+| Task | File                                      | Description                                    |
+|------|-------------------------------------------|------------------------------------------------|
+| ERD  | `ER_Diagram.md`                           | Entity-Relationship model of the schema        |
+| 0    | `joins_queries.sql`                       | INNER, LEFT (with ORDER BY), FULL OUTER JOIN   |
+| 1    | `subqueries.sql`                          | Correlated & non‑correlated subqueries         |
+| 2    | `aggregations_and_window_functions.sql`   | GROUP BY + ROW_NUMBER & RANK window functions  |
+| 3    | `database_index.sql`                      | CREATE INDEX statements                       |
+| 3    | `index_performance.md`                    | EXPLAIN ANALYZE before/after indexing          |
+| 4    | `performance.sql`                         | Initial & refactored complex query             |
+| 4    | `optimization_report.md`                  | EXPLAIN analysis & refactoring summary         |
+| 5    | `partitioning.sql`                        | Booking table partitioning                     |
+| 5    | `partition_performance.md`                | Partition performance benchmarks               |
+| 6    | `performance_monitoring.md`               | SHOW PROFILE/EXPLAIN ANALYZE & schema tweaks   |
 ```
 
 ---
@@ -95,7 +94,8 @@ SELECT b.booking_id,
        b.start_date,
        b.end_date
 FROM bookings b
-INNER JOIN users u ON b.user_id = u.user_id;
+INNER JOIN users u ON b.user_id = u.user_id
+ORDER BY b.booking_id;
 
 -- 2. LEFT JOIN: All properties with their reviews (including none)
 SELECT p.property_id,
@@ -103,17 +103,19 @@ SELECT p.property_id,
        r.review_id,
        r.rating
 FROM properties p
-LEFT JOIN reviews r ON p.property_id = r.property_id;
+LEFT JOIN reviews r ON p.property_id = r.property_id
+ORDER BY p.property_id;
 
 -- 3. FULL OUTER JOIN: All users and all bookings
--- (Note: MySQL does not support FULL OUTER JOIN; use UNION workaround)
+-- (MySQL workaround via UNION)
 SELECT u.user_id, u.name, b.booking_id
 FROM users u
 LEFT JOIN bookings b ON u.user_id = b.user_id
 UNION
 SELECT u.user_id, u.name, b.booking_id
 FROM users u
-RIGHT JOIN bookings b ON u.user_id = b.user_id;
+RIGHT JOIN bookings b ON u.user_id = b.user_id
+ORDER BY user_id, booking_id;
 ````
 
 ---
@@ -156,13 +158,15 @@ SELECT u.user_id,
        COUNT(b.booking_id) AS total_bookings
 FROM users u
 LEFT JOIN bookings b ON u.user_id = b.user_id
-GROUP BY u.user_id, u.name;
+GROUP BY u.user_id, u.name
+ORDER BY total_bookings DESC;
 
--- 2. Rank properties by bookings
+-- 2. Rank properties by bookings (using ROW_NUMBER)
 SELECT
   property_id,
   location,
   bookings_count,
+  ROW_NUMBER() OVER (ORDER BY bookings_count DESC) AS row_num,
   RANK() OVER (ORDER BY bookings_count DESC) AS rank
 FROM (
   SELECT p.property_id,
@@ -171,7 +175,8 @@ FROM (
   FROM properties p
   LEFT JOIN bookings b ON p.property_id = b.property_id
   GROUP BY p.property_id, p.location
-) sub;
+) sub
+ORDER BY bookings_count DESC;
 ```
 
 ---
@@ -188,8 +193,36 @@ CREATE INDEX idx_payments_booking_id ON payments(booking_id);
 
 ---
 
-### 8. `database-adv-script/performance.sql`
+### 8. `database-adv-script/index_performance.md`
 
+````markdown
+# Index Performance Analysis
+
+## Before Indexing
+Run:
+```sql
+EXPLAIN ANALYZE
+SELECT * FROM bookings WHERE user_id = 123;
+````
+
+*Include execution time and plan here.*
+
+## After Indexing
+
+Run:
+
+```sql
+EXPLAIN ANALYZE
+SELECT * FROM bookings WHERE user_id = 123;
+```
+
+*Include improved execution time and plan here.*
+
+````
+
+---
+
+### 9. `database-adv-script/performance.sql`
 ```sql
 -- Task 4: Initial Complex Query
 SELECT b.booking_id,
@@ -204,16 +237,45 @@ JOIN users u ON b.user_id = u.user_id
 JOIN properties p ON b.property_id = p.property_id
 JOIN payments pay ON pay.booking_id = b.booking_id;
 
--- (Refactor after EXPLAIN analysis...)
+-- Task 4: Refactored Query (example: select only necessary columns and use indexed joins)
+SELECT b.booking_id,
+       u.name AS user_name,
+       p.location AS property_location,
+       pay.amount
+FROM bookings b
+JOIN users u ON b.user_id = u.user_id
+JOIN properties p ON b.property_id = p.property_id
+JOIN payments pay ON pay.booking_id = b.booking_id;
+````
+
+---
+
+### 10. `database-adv-script/optimization_report.md`
+
+```markdown
+# Query Optimization Report
+
+## Initial EXPLAIN Analysis
+Include the EXPLAIN output for the initial query.
+
+## Identified Inefficiencies
+- Unnecessary column selections.
+- Full table scans on bookings.
+
+## Refactoring Steps
+1. Selected only required columns.
+2. Ensured joins use indexed columns.
+
+## Final EXPLAIN Analysis
+Include the EXPLAIN output for the refactored query, showing reduced cost.
 ```
 
 ---
 
-### 9. `database-adv-script/partitioning.sql`
+### 11. `database-adv-script/partitioning.sql`
 
 ```sql
 -- Task 5: Partition bookings by start_date (PostgreSQL example)
--- 1. Create partitioned table
 CREATE TABLE bookings_partitioned (
   booking_id   SERIAL PRIMARY KEY,
   user_id      INT NOT NULL,
@@ -222,13 +284,11 @@ CREATE TABLE bookings_partitioned (
   end_date     DATE NOT NULL
 ) PARTITION BY RANGE (start_date);
 
--- 2. Create partitions (e.g., by year)
 CREATE TABLE bookings_2024 PARTITION OF bookings_partitioned
   FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
 CREATE TABLE bookings_2025 PARTITION OF bookings_partitioned
   FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
 
--- 3. Insert data from original bookings
 INSERT INTO bookings_partitioned (booking_id, user_id, property_id, start_date, end_date)
 SELECT booking_id, user_id, property_id, start_date, end_date
 FROM bookings;
@@ -236,6 +296,59 @@ FROM bookings;
 
 ---
 
-*The markdown reports (`*.md`) will include `EXPLAIN` outputs, timing comparisons, and narrative summaries under each task’s section.*
+### 12. `database-adv-script/partition_performance.md`
 
-Feel free to review this scaffold—once approved, I’ll implement the EXPLAIN analyses, refactor queries, and fill in the performance reports step by step.
+````markdown
+# Partition Performance Analysis
+
+## Before Partitioning
+Run:
+```sql
+EXPLAIN ANALYZE
+SELECT * FROM bookings WHERE start_date >= '2025-01-01' AND start_date < '2025-06-01';
+````
+
+*Include execution time and plan.*
+
+## After Partitioning
+
+Run:
+
+```sql
+EXPLAIN ANALYZE
+SELECT * FROM bookings_partitioned WHERE start_date >= '2025-01-01' AND start_date < '2025-06-01';
+```
+
+*Include execution time and plan improvements.*
+
+````
+
+---
+
+### 13. `database-adv-script/performance_monitoring.md`
+```markdown
+# Performance Monitoring & Refinement
+
+## Monitoring Queries
+Use:
+```sql
+EXPLAIN ANALYZE SELECT ...;
+SHOW PROFILE;
+````
+
+*Document sample outputs.*
+
+## Identified Bottlenecks
+
+* Long-running joins on large tables.
+
+## Schema Adjustments
+
+* Added composite index on (user\_id, start\_date).
+
+## Post-Adjustment Performance
+
+Include new EXPLAIN ANALYZE results showing improvements.
+
+```
+```

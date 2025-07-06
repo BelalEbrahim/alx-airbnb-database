@@ -1,3 +1,4 @@
+-- Task 1: Subqueries
 -- 1. Non‑correlated: Properties with avg rating > 4.0
 SELECT property_id,
        location
